@@ -4,6 +4,7 @@ import { useRef } from "react"
 import useDrag from './useDrag'
 import {Button,message} from 'antd'
 import { CHUNK_SIZE } from './constant'
+import axiosInstance from "./axios"
 
 function FileUpload(){
   const uploadContainerRef = useRef(null)
@@ -40,7 +41,32 @@ async function uploadFile(file,fileName) {
   //切片
   const chunks = createFileChunks(file,fileName)
   console.log(chunks)
+  const requests = chunks.map(({chunk,chunkFileName})=>{
+    return createRequest(fileName,chunkFileName,chunk)
+  })
+  try {
+    //同时上传分片
+    await Promise.all(requests)
+    // 全部上传完成后 请求合并接口
+    await axiosInstance.get(`/merge/${fileName}`)
+    message.success('文件上传成功')
+    
+  } catch (error) {
+    console.log(error)
+    
+  }
   
+}
+
+function createRequest(fileName,chunkFileName,chunk){
+  return axiosInstance.post(`/upload/${fileName}`,chunk,{
+    headers:{
+      'Content-Type': 'application/octet-stream'
+    },
+    params:{
+      chunkFileName
+    }
+  })
 }
 
 function createFileChunks(file,fileName){
@@ -79,9 +105,10 @@ function bufferToHex(buffer){
 //显示文件预览信息
 function renderFilePreview(filePreview){
    const {url,type} = filePreview
+   console.log(filePreview,url)
    if(url){
     if(type.startsWith('video/')){
-      return (<video controls style={{width:'50%',height:'200px'}}>
+      return (<video controls style={{width:'50%',height:'200px'}} key={url} >
         <source src={url} alt='preview' controls type="video/mp4"></source>
       </video>
     )
