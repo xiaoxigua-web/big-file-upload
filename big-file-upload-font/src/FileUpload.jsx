@@ -1,8 +1,8 @@
 import { InboxOutlined } from "@ant-design/icons"
 import './FileUpload.css'
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import useDrag from './useDrag'
-import {Button,message} from 'antd'
+import {Button,message,Progress} from 'antd'
 import { CHUNK_SIZE } from './constant'
 import axiosInstance from "./axios"
 
@@ -10,39 +10,57 @@ function FileUpload(){
   const uploadContainerRef = useRef(null)
   const {
     selectedFile,
-    filePreview
+    filePreview,
+    resetFile
   } = useDrag(uploadContainerRef)
   console.log(selectedFile)
+  const resetFileStatus = ()=>{
+    resetFile()
+    setUploadProgress({})
+  }
+  let [uploadProgress,setUploadProgress] = useState({})
   const handleUpload = async ()=>{
     if(!selectedFile){
       message.error('未选择文件')
       return
     }
     const fileName = await getFileName(selectedFile)
-    uploadFile(selectedFile,fileName)
+    uploadFile(selectedFile,fileName,setUploadProgress,resetFileStatus)
     console.log('filename',fileName)
   }
   const renderButton = ()=>{
     return <Button onClick={handleUpload}>上传</Button>
   }
+  const renderProgress = ()=>{
+    return Object.keys(uploadProgress).map((chunkName,index)=>{
+      return (
+        <div>
+          <span>切片{index}</span>
+          <Progress percent={uploadProgress[chunkName]} />
+        </div>
+      )
+    })
+  }
+
   return (
     <>
      <div className="upload-container" ref={uploadContainerRef}>
        {renderFilePreview(filePreview)}
      </div>
      {renderButton()}
+     {renderProgress()}
     </>
    
   )
 }
 
 //实现切片上传
-async function uploadFile(file,fileName) {
+async function uploadFile(file,fileName,setUploadProgress,resetFileStatus) {
   //切片
   const chunks = createFileChunks(file,fileName)
   console.log(chunks)
   const requests = chunks.map(({chunk,chunkFileName})=>{
-    return createRequest(fileName,chunkFileName,chunk)
+    return createRequest(fileName,chunkFileName,chunk,setUploadProgress)
   })
   try {
     //同时上传分片
@@ -50,6 +68,8 @@ async function uploadFile(file,fileName) {
     // 全部上传完成后 请求合并接口
     await axiosInstance.get(`/merge/${fileName}`)
     message.success('文件上传成功')
+    //清空预览和进度条
+    resetFileStatus()
     
   } catch (error) {
     console.log(error)
@@ -58,14 +78,23 @@ async function uploadFile(file,fileName) {
   
 }
 
-function createRequest(fileName,chunkFileName,chunk){
+function createRequest(fileName,chunkFileName,chunk,setUploadProgress){
   return axiosInstance.post(`/upload/${fileName}`,chunk,{
     headers:{
       'Content-Type': 'application/octet-stream'
     },
     params:{
       chunkFileName
+    },
+    onUploadProgress:(progressEvent)=>{
+      const percentCompleted = Math.round(progressEvent.loaded * 100 / progressEvent.total) 
+      setUploadProgress((prevProgress)=>({
+        ...prevProgress,
+        [chunkFileName]:percentCompleted
+      }))
+
     }
+
   })
 }
 

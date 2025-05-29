@@ -62,9 +62,15 @@ function useDrag(uploadContainerRef){
     }
   },[])
 
+  const resetFile = ()=>{
+    setSelectedFile(null)
+    setFilePreview({url:null,type:null })
+  }
+
   return  {
     selectedFile,
-    filePreview
+    filePreview,
+    resetFile
   }
 }
 
