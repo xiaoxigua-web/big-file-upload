@@ -44,16 +44,38 @@ app.post('/upload/:fileName', async (req, res, next) => {
   }
 
 })
+app.get('/verify/:fileName', async (req, res, next) => {
+  const { fileName } = req.params
+  const filePath = path.resolve(PUBLIC_DIR, fileName)
+  const isExist = await fs.pathExists(filePath)
+  console.log('isExist', isExist)
+  if (isExist) {
+    return res.json({ success: true, needUpload: false })
+  }
+  const chunksDir = path.resolve(TEMP_DIR, fileName)
+  const exist = await fs.pathExists(chunksDir)
+  let uploadedList = []
+  if (exist) {
+    const chunkFiles = fs.readdir(chunksDir)
+    uploadedList = await Promise.all(chunkFiles.map(async function (chunkFile) {
+      const stat = await fs.stat(path.resolve(chunksDir, chunkFile))
+      return {
+        chunkFileName, size: stat.size
+      }
+    }))
+  }
+  res.json({ success: true, needUpload: true, uploadedList })
+})
+
+
 app.get('/merge/:fileName', async (req, res, next) => {
   const { fileName } = req.params
-  console.log('merge',fileName)
+  console.log('merge', fileName)
   try {
     await mergeChunks(fileName)
-
     res.json({
       success: true
     })
-
   } catch (error) {
 
   }
@@ -65,13 +87,13 @@ async function mergeChunks(fileName) {
   const chunkFiles = await fs.readdir(chunkDir)
   try {
     chunkFiles.sort((a, b) => Number(a.split('-')[1]) - Number(b.split('-')[1]))
-    console.log('chunkfiles',chunkFiles)
+    console.log('chunkfiles', chunkFiles)
     const pipes = chunkFiles.map((chunkFile, index) => {
       return pipeStream(
         fs.createReadStream(path.resolve(chunkDir, chunkFile), { autoClose: true }),
         fs.createWriteStream(mergedFilePath, { start: index * CHUNK_SIZE })
       )
-    }) 
+    })
     await Promise.all(pipes)
     console.log('合并完成!!')
     await fs.rmdir(chunkDir, { recursive: true })
